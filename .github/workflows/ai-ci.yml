@@ -1,0 +1,51 @@
+name: AI-Enhanced CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test-with-ai:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: pip install pytest
+
+    - name: Run tests (capture logs)
+      id: test
+      run: |
+        pytest 2>&1 | tee error.log
+      continue-on-error: true
+
+    - name: AI Error Summary
+      if: failure()
+      env:
+        AI_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
+      run: |
+        ERROR_LOG=$(cat error.log)
+        echo "Sending error log to GitHub AI model..."
+        curl https://api.github.com/models/gpt-4.1-mini/inference \
+          -H "Authorization: Bearer $AI_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"messages\": [
+              {
+                \"role\": \"system\",
+                \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"
+              },
+              {
+                \"role\": \"user\",
+                \"content\": \"Here is the CI error log:\\n$ERROR_LOG\"
+              }
+            ]
+          }"
