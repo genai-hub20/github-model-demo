@@ -25,15 +25,17 @@ jobs:
       id: test
       run: |
         echo "Running tests..."
+        set -o pipefail
         pytest 2>&1 | tee error.log
-        if [ ${PIPESTATUS[0]} -ne 0 ]; then
-          echo "❌ Tests failed! Showing error log:"
-          cat error.log
-          exit 1
-        fi
+
+    - name: Show test log on failure
+      if: failure()
+      run: |
+        echo "❌ Tests failed! Here is the error log:"
+        cat error.log
 
     - name: AI Error Summary
-      if: failure()  # Only run if previous step failed
+      if: failure()
       env:
         AI_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
       run: |
