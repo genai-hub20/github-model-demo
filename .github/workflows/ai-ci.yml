@@ -6,8 +6,7 @@ on:
   pull_request:
 
 permissions:
-  models: read  # Required to call GitHub Models API
-
+  models: read  # Required to call GitHub Models AP
 jobs:
   test-with-ai:
     runs-on: ubuntu-latest
@@ -46,11 +45,13 @@ jobs:
     - name: AI Error Summary
       if: failure()
       env:
-        GITHUB_TOKEN: ${{ secrets.MODELS_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.MODELS_API_TOKEN }}
       run: |
         echo "Sending error log to GitHub AI model..."
-        ERROR_LOG=$(cat error.log)
-
+        # Read log and escape newlines
+        ERROR_LOG=$(cat error.log | jq -Rs .)
+        
+        # jq -Rs reads the file as raw string and safely escapes newlines/quotes
         curl -s "https://models.github.ai/inference/chat/completions" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -62,8 +63,9 @@ jobs:
               },
               {
                 \"role\": \"user\",
-                \"content\": \"Here is the CI error log:\n$ERROR_LOG\"
+                \"content\": $ERROR_LOG
               }
             ],
             \"model\": \"openai/gpt-4.1-mini\"
           }"
+
