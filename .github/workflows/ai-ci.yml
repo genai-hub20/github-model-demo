@@ -6,27 +6,24 @@ on:
   pull_request:
 
 permissions:
-  models: read  # Required to call GitHub Models AP
+  models: read
+
 jobs:
   test-with-ai:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout code
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Step 2: Set up Python
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    # Step 3: Install dependencies
     - name: Install dependencies
-      run: pip install pytest
+      run: pip install pytest jq
 
-    # Step 4: Run tests
     - name: Run tests
       id: test
       run: |
@@ -34,38 +31,30 @@ jobs:
         set -o pipefail
         pytest 2>&1 | tee error.log
 
-    # Step 5: Echo test log if tests fail
     - name: Show test log on failure
       if: failure()
       run: |
         echo "❌ Tests failed! Here is the error log:"
         cat error.log
 
-    # Step 6: AI Error Summary using GitHub Models
-    - name: AI Error Summary
+    - name: AI Error Summary using GitHub Models
       if: failure()
       env:
-        GITHUB_TOKEN: ${{ secrets.MODELS_API_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "Sending error log to GitHub AI model..."
-        # Read log and escape newlines
         ERROR_LOG=$(cat error.log | jq -Rs .)
-        
-        # jq -Rs reads the file as raw string and safely escapes newlines/quotes
-        curl -s "https://models.github.ai/inference/chat/completions" \
+
+        RESPONSE=$(curl -s "https://models.github.ai/inference/chat/completions" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
           -d "{
             \"messages\": [
-              {
-                \"role\": \"system\",
-                \"content\": \"You are a DevOps assistant. Summarise CI/CD errors and suggest fixes.\"
-              },
-              {
-                \"role\": \"user\",
-                \"content\": $ERROR_LOG
-              }
+              {\"role\": \"system\", \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"},
+              {\"role\": \"user\", \"content\": $ERROR_LOG}
             ],
             \"model\": \"openai/gpt-4.1-mini\"
-          }"
+          }")
 
+        echo "=== AI Summary ==="
+        echo "$RESPONSE"
