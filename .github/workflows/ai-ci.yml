@@ -37,14 +37,14 @@ jobs:
         echo "❌ Tests failed! Here is the error log:"
         cat error.log
 
-    - name: AI Error Summary using GitHub Models
+    - name: AI Error Summary
       if: failure()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "Sending error log to GitHub AI model..."
         ERROR_LOG=$(cat error.log | jq -Rs .)
-
+    
         RESPONSE=$(curl -s "https://models.github.ai/inference/chat/completions" \
           -H "Content-Type: application/json" \
           -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -53,8 +53,10 @@ jobs:
               {\"role\": \"system\", \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"},
               {\"role\": \"user\", \"content\": $ERROR_LOG}
             ],
-            \"model\": \"openai/gpt-4.1-mini\"
+            \"model\": \"openai/gpt-4.1-mini\" 
           }")
-
+    
+        # Extract just the assistant's text
         echo "=== AI Summary ==="
-        echo "$RESPONSE"
+        echo "$RESPONSE" | jq -r '.choices[0].message.content'
+
