@@ -1,4 +1,4 @@
-name: AI-Enhanced CI/CD
+name: AI-Enhanced CI/CD Demo
 
 on:
   push:
@@ -25,27 +25,37 @@ jobs:
       id: test
       run: |
         pytest 2>&1 | tee error.log
-      continue-on-error: true
+      continue-on-error: true  # Job continues even if tests fail
 
     - name: AI Error Summary
-      if: failure()
+      if: always()  # Always run so we can show demo
       env:
         AI_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
       run: |
-        ERROR_LOG=$(cat error.log)
-        echo "Sending error log to GitHub AI model..."
-        curl https://api.github.com/models/gpt-4.1-mini/inference \
-          -H "Authorization: Bearer $AI_API_KEY" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"messages\": [
-              {
-                \"role\": \"system\",
-                \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"
-              },
-              {
-                \"role\": \"user\",
-                \"content\": \"Here is the CI error log:\\n$ERROR_LOG\"
-              }
-            ]
-          }"
+        if [ -s error.log ]; then
+          ERROR_LOG=$(cat error.log)
+          echo "=== AI Summary of CI/CD Errors ==="
+          curl https://api.github.com/models/gpt-4.1-mini/inference \
+            -H "Authorization: Bearer $AI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"messages\": [
+                {
+                  \"role\": \"system\",
+                  \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"
+                },
+                {
+                  \"role\": \"user\",
+                  \"content\": \"Here is the CI error log:\\n$ERROR_LOG\"
+                }
+              ]
+            }"
+        else
+          echo "No errors detected. CI/CD tests passed!"
+        fi
+
+    - name: Upload test logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs
+        path: error.log
