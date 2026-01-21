@@ -21,41 +21,36 @@ jobs:
     - name: Install dependencies
       run: pip install pytest
 
-    - name: Run tests (capture logs)
+    - name: Run tests
       id: test
       run: |
+        echo "Running tests..."
         pytest 2>&1 | tee error.log
-      continue-on-error: true  # Job continues even if tests fail
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+          echo "❌ Tests failed! Showing error log:"
+          cat error.log
+          exit 1
+        fi
 
     - name: AI Error Summary
-      if: always()  # Always run so we can show demo
+      if: failure()  # Only run if previous step failed
       env:
         AI_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
       run: |
-        if [ -s error.log ]; then
-          ERROR_LOG=$(cat error.log)
-          echo "=== AI Summary of CI/CD Errors ==="
-          curl https://api.github.com/models/gpt-4.1-mini/inference \
-            -H "Authorization: Bearer $AI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"messages\": [
-                {
-                  \"role\": \"system\",
-                  \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"
-                },
-                {
-                  \"role\": \"user\",
-                  \"content\": \"Here is the CI error log:\\n$ERROR_LOG\"
-                }
-              ]
-            }"
-        else
-          echo "No errors detected. CI/CD tests passed!"
-        fi
-
-    - name: Upload test logs
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-logs
-        path: error.log
+        echo "Sending error log to GitHub AI model..."
+        ERROR_LOG=$(cat error.log)
+        curl https://api.github.com/models/gpt-4.1-mini/inference \
+          -H "Authorization: Bearer $AI_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"messages\": [
+              {
+                \"role\": \"system\",
+                \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"
+              },
+              {
+                \"role\": \"user\",
+                \"content\": \"Here is the CI error log:\\n$ERROR_LOG\"
+              }
+            ]
+          }"
