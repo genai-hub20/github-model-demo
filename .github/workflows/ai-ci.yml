@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   pull_request:
 
+permissions:
+  models: read  # Required to call GitHub Models API
+
 jobs:
   test-with-ai:
     runs-on: ubuntu-latest
@@ -14,68 +17,53 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Step 2: Test GitHub Models API Key
-    - name: Test GitHub Models API Key
-      run: |
-        echo "Testing GitHub Models API..."
-        curl https://api.github.com/models/gpt-4.1-mini/inference \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_MODELS_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d '{
-            "messages":[
-              {"role":"system","content":"You are a test bot."},
-              {"role":"user","content":"Say hello!"}
-            ]
-          }'
-
-    # Step 3: Set up Python
+    # Step 2: Set up Python
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
-    # Step 4: Install dependencies
+    # Step 3: Install dependencies
     - name: Install dependencies
       run: pip install pytest
 
-    # Step 5: Run tests (fail immediately if any test fails)
+    # Step 4: Run tests
     - name: Run tests
       id: test
       run: |
         echo "Running tests..."
-        set -o pipefail  # ensures pipeline fails if pytest fails
+        set -o pipefail
         pytest 2>&1 | tee error.log
 
-    # Step 6: Echo error log if tests fail
+    # Step 5: Echo test log if tests fail
     - name: Show test log on failure
       if: failure()
       run: |
         echo "❌ Tests failed! Here is the error log:"
         cat error.log
 
-    # Step 7: AI Error Summary (only runs if tests fail)
+    # Step 6: AI Error Summary using GitHub Models
     - name: AI Error Summary
       if: failure()
       env:
-        AI_API_KEY: ${{ secrets.GITHUB_MODELS_API_KEY }}
+        GITHUB_TOKEN: ${{ secrets.MODELS_API_KEY }}
       run: |
         echo "Sending error log to GitHub AI model..."
         ERROR_LOG=$(cat error.log)
-        # Uncomment below to use real GitHub Models API
-        RESPONSE=$(curl -s https://api.github.com/models/gpt-4.1-mini/inference \
-          -H "Authorization: Bearer $AI_API_KEY" \
+
+        curl -s "https://models.github.ai/inference/chat/completions" \
           -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
           -d "{
             \"messages\": [
-              {\"role\": \"system\", \"content\": \"You are a DevOps assistant. Summarise CI/CD errors clearly and suggest fixes.\"},
-              {\"role\": \"user\", \"content\": \"Here is the CI error log:\n$ERROR_LOG\"}
-            ]
-          }")
-        echo "=== AI Response ==="
-        echo "$RESPONSE"
-
-        # Mock AI summary for demo (if you don’t have API key)
-        echo "=== Mock AI Summary ==="
-        echo "Error detected in tests!"
-        echo "Cause: division by zero in function divide()"
-        echo "Suggested Fix: add a check to prevent denominator = 0"
+              {
+                \"role\": \"system\",
+                \"content\": \"You are a DevOps assistant. Summarise CI/CD errors and suggest fixes.\"
+              },
+              {
+                \"role\": \"user\",
+                \"content\": \"Here is the CI error log:\n$ERROR_LOG\"
+              }
+            ],
+            \"model\": \"openai/gpt-4.1-mini\"
+          }"
